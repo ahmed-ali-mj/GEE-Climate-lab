@@ -1,18 +1,31 @@
-# Filename: app-geemap.py
-
+import pandapower as pp
 import streamlit as st
+import pandas as pd
+import geopandas as gpd
 import ee
 import geemap.foliumap as geemap
 #import geemap
 import folium
 from streamlit_folium import st_folium
-
+import functions
 from datetime import date, datetime, timedelta, timezone
 import random
+import re
+import ast
+import nest_asyncio
+import ee
+from shapely.geometry import LineString
+import geemap
+import numpy as np
+import math
+import traceback
+import plotly.graph_objects as go
+from shapely.geometry import LineString, Point
+import plotly.express as px
 
 # Set page configuration
 st.set_page_config(
-    page_title="Multi-Page Streamlit App",
+    page_title="Continuous Monitoring of Climate Risks to Electricity Grid using Google Earth Engine",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -26,49 +39,258 @@ selection = st.sidebar.radio("Go to", pages)
 @st.cache_resource
 def initialize_ee():
     ee.Authenticate()
+    #ee.Initialize(project='ee-gdss-teacher')
     ee.Initialize(project='ee-ahmedalimj')
-
 
 #initialze GEE
 initialize_ee()
 
+
+# Shared session state initialization
+if "show_results" not in st.session_state:
+    st.session_state.show_results = False
+if "network_data" not in st.session_state:
+    st.session_state.network_data = None
+if "map_obj" not in st.session_state:
+    st.session_state.map_obj = None
+if "uploaded_file_key" not in st.session_state:
+    st.session_state.uploaded_file_key = None
+if "weather_map_obj" not in st.session_state:
+    st.session_state.weather_map_obj = None
+
+folium.Map.add_ee_layer = functions.add_ee_layer
 # ────────────────────────────────────────────────────────────────────────────
 # Page 1 :  Network Initialization
 # ────────────────────────────────────────────────────────────────────────────
 if selection == "Network Initialization":
     st.header('Network Initialization')
     
-    karachi = ee.Geometry.Point(67.0011, 24.8607)
-    roi = karachi.buffer(600000).bounds()
-    if "point_assets" not in st.session_state:
-        st.session_state.point_assets = ee.FeatureCollection([
-            ee.Feature(ee.Geometry.Point(66.6567, 25.6453), {'name': 'Tower_1'}),
-            ee.Feature(ee.Geometry.Point(67.0153, 24.8732), {'name': 'Tower_2'}),
-            ee.Feature(ee.Geometry.Point(67.5428, 25.0973), {'name': 'Tower_3'}),
-            ee.Feature(ee.Geometry.Point(68.1849, 25.3322), {'name': 'Tower_4'}),
-            ee.Feature(ee.Geometry.Point(67.7472, 27.1833), {'name': 'Tower_5'})
-            ]);
-    if "line_assets" not in st.session_state:
-        st.session_state.line_assets = ee.FeatureCollection([
-            ee.Feature(ee.Geometry.LineString([[66.6567, 25.6453],[67.5428, 25.0973]]), {'name': 'Line_1', 'from': '1', 'to': '3'}),
-            ee.Feature(ee.Geometry.LineString([[67.0153, 24.8732],[67.5428, 25.0973]]), {'name': 'Line_2', 'from': '2', 'to': '3'}),
-            ee.Feature(ee.Geometry.LineString([[67.5428, 25.0973],[68.1849, 25.3322]]), {'name': 'Line_3', 'from': '3', 'to': '4'}),
-            ee.Feature(ee.Geometry.LineString([[68.1849, 25.3322],[67.7472, 27.1833]]), {'name': 'Line_4', 'from': '4', 'to': '5'})
-            ]);
     
-
-    Map = geemap.Map()
-    Map.centerObject(karachi, 5)
-    Map.addLayer(st.session_state.point_assets, {'color': 'red'}, 'Infrastructure Point Assets');
-    Map.addLayer(st.session_state.line_assets, {'color': 'red'}, 'Infrastructure Line Assets');
-
-    # Add layer control
-    Map.addLayerControl()
-
-    # Render the map in Streamlit
-    Map.to_streamlit(width=700, height=500)
-
+    #Capstone
     
+    
+    
+    # # File uploader for the Excel file
+    # uploaded_file = st.file_uploader("Upload your network Excel file (e.g., Final_IEEE_9Bus_Parameters_only.xlsx)", type=["xlsx"], key="file_uploader")
+
+    st.markdown(
+    "Do not have an Excel File in our specified format?  \n"
+    "[Download the sample IEEE-9 or 14 bus network parameters]"
+    "(https://drive.google.com/drive/folders/1oT10dY6hZiM0q3AYiFzEqe_GQ5vA-eEa?usp=sharing)"
+    " from Google Drive.",
+    unsafe_allow_html=True,
+    )
+    
+    # File uploader for the Excel file
+    uploaded_file = st.file_uploader(
+        "Upload your network Excel file",
+        type=["xlsx"],
+        key="file_uploader",
+        help="You can also use the template from Google Drive: "
+             "[Sample Excel](https://drive.google.com/drive/folders/1oT10dY6hZiM0q3AYiFzEqe_GQ5vA-eEa?usp=sharing)",
+    )
+    
+    # Check if a new file was uploaded
+    if uploaded_file is not None and st.session_state.uploaded_file_key != uploaded_file.name:
+        st.session_state.show_results = False
+        st.session_state.network_data = None
+        st.session_state.map_obj = None
+        st.session_state.uploaded_file_key = uploaded_file.name
+        st.session_state.uploaded_file = uploaded_file  # Store the file object
+
+    if uploaded_file is not None and not st.session_state.show_results:
+        # Create an empty pandapower network
+        net = pp.create_empty_network()
+
+        # --- Create Buses ---
+        df_bus = pd.read_excel(uploaded_file, sheet_name="Bus Parameters", index_col=0)
+        for idx, row in df_bus.iterrows():
+            pp.create_bus(net,
+                          name=row["name"],
+                          vn_kv=row["vn_kv"],
+                          zone=row["zone"],
+                          in_service=row["in_service"],
+                          max_vm_pu=row["max_vm_pu"],
+                          min_vm_pu=row["min_vm_pu"])
+
+        # --- Create Loads ---
+        df_load = pd.read_excel(uploaded_file, sheet_name="Load Parameters", index_col=0)
+        for idx, row in df_load.iterrows():
+            pp.create_load(net,
+                           bus=row["bus"],
+                           p_mw=row["p_mw"],
+                           q_mvar=row["q_mvar"],
+                           in_service=row["in_service"])
+
+        # --- Create Transformers (if sheet exists) ---
+        df_trafo = None
+        if "Transformer Parameters" in pd.ExcelFile(uploaded_file).sheet_names:
+            df_trafo = pd.read_excel(uploaded_file, sheet_name="Transformer Parameters", index_col=0)
+            for idx, row in df_trafo.iterrows():
+                pp.create_transformer_from_parameters(net,
+                                                      hv_bus=row["hv_bus"],
+                                                      lv_bus=row["lv_bus"],
+                                                      sn_mva=row["sn_mva"],
+                                                      vn_hv_kv=row["vn_hv_kv"],
+                                                      vn_lv_kv=row["vn_lv_kv"],
+                                                      vk_percent=row["vk_percent"],
+                                                      vkr_percent=row["vkr_percent"],
+                                                      pfe_kw=row["pfe_kw"],
+                                                      i0_percent=row["i0_percent"],
+                                                      in_service=row["in_service"],
+                                                      max_loading_percent=row["max_loading_percent"])
+
+        # --- Create Generators/External Grid ---
+        df_gen = pd.read_excel(uploaded_file, sheet_name="Generator Parameters", index_col=0)
+        df_gen['in_service'] = df_gen['in_service'].astype(str).str.strip().str.upper().map({'TRUE': True, 'FALSE': False}).fillna(True)
+        df_gen['controllable'] = df_gen['controllable'].astype(str).str.strip().str.upper().map({'TRUE': True, 'FALSE': False})
+        #st.write("Row keys:", row.keys())  # Shows available keys in the row
+        #st.write("Row content:", row)      # Displays the full row
+        for idx, row in df_gen.iterrows():
+            if row["slack_weight"] == 1:
+                ext_idx = pp.create_ext_grid(net,
+                                             bus=row["bus"],
+                                             vm_pu=row["vm_pu"],
+                                             va_degree=0)
+                pp.create_poly_cost(net, element=ext_idx, et="ext_grid",
+                                    cp0_eur_per_mw=row["cp0_pkr_per_mw"],
+                                    cp1_eur_per_mw=row["cp1_pkr_per_mw"],
+                                    cp2_eur_per_mw=row["cp2_pkr_per_mw"],
+                                    cp0_eur_per_mvar=row["cp0_pkr_per_mvar"],   
+                                    cq1_eur_per_mvar=row["cq1_pkr_per_mvar"],
+                                    cq2_eur_per_mvar=row["cq2_pkr_per_mvar"])
+            else:
+                gen_idx = pp.create_gen(net,
+                                        bus=row["bus"],
+                                        p_mw=row["p_mw"],
+                                        vm_pu=row["vm_pu"],
+                                        min_q_mvar=row["min_q_mvar"],
+                                        max_q_mvar=row["max_q_mvar"],
+                                        scaling=row["scaling"],
+                                        in_service=row["in_service"],
+                                        slack_weight=row["slack_weight"],
+                                        controllable=row["controllable"],
+                                        max_p_mw=row["max_p_mw"],
+                                        min_p_mw=row["min_p_mw"])
+                pp.create_poly_cost(net, element=gen_idx, et="gen",
+                                    cp0_eur_per_mw=row["cp0_pkr_per_mw"],
+                                    cp1_eur_per_mw=row["cp1_pkr_per_mw"],
+                                    cp2_eur_per_mw=row["cp2_pkr_per_mw"],
+                                    cp0_eur_per_mvar=row["cp0_pkr_per_mvar"],
+                                    cq1_eur_per_mvar=row["cq1_pkr_per_mvar"],
+                                    cq2_eur_per_mvar=row["cq2_pkr_per_mvar"])
+
+        # --- Create Lines ---
+        df_line = pd.read_excel(uploaded_file, sheet_name="Line Parameters", index_col=0)
+        for idx, row in df_line.iterrows():
+            if isinstance(row["geodata"], str):
+                geodata = ast.literal_eval(row["geodata"])
+            else:
+                geodata = row["geodata"]
+            pp.create_line_from_parameters(net,
+                                           from_bus=row["from_bus"],
+                                           to_bus=row["to_bus"],
+                                           length_km=row["length_km"],
+                                           r_ohm_per_km=row["r_ohm_per_km"],
+                                           x_ohm_per_km=row["x_ohm_per_km"],
+                                           c_nf_per_km=row["c_nf_per_km"],
+                                           max_i_ka=row["max_i_ka"],
+                                           in_service=row["in_service"],
+                                           max_loading_percent=row["max_loading_percent"],
+                                           geodata=geodata)
+
+        # --- Read Dynamic Profiles ---
+        df_load_profile = pd.read_excel(uploaded_file, sheet_name="Load Profile")
+        df_load_profile.columns = df_load_profile.columns.str.strip()
+
+        df_gen_profile = pd.read_excel(uploaded_file, sheet_name="Generator Profile")
+        df_gen_profile.columns = df_gen_profile.columns.str.strip()
+
+        # --- Build Dictionaries for Dynamic Column Mapping ---
+        load_dynamic = {}
+        for col in df_load_profile.columns:
+            m = re.match(r"p_mw_bus_(\d+)", col)
+            if m:
+                bus = int(m.group(1))
+                q_col = f"q_mvar_bus_{bus}"
+                if q_col in df_load_profile.columns:
+                    load_dynamic[bus] = {"p": col, "q": q_col}
+
+        gen_dynamic = {}
+        for col in df_gen_profile.columns:
+            if col.startswith("p_mw"):
+                numbers = re.findall(r'\d+', col)
+                if numbers:
+                    bus = int(numbers[-1])
+                    gen_dynamic[bus] = col
+
+        # Store network data in session state
+        st.session_state.network_data = {
+            'df_bus': df_bus,
+            'df_load': df_load,
+            'df_gen': df_gen,
+            'df_line': df_line,
+            'df_load_profile': df_load_profile,
+            'df_gen_profile': df_gen_profile,
+            # 'df_gen_params':   df_gen_params,      #  ← NEW
+            'df_trafo': df_trafo  # Add transformer data to session state
+        }
+
+    # --- Button to Display Results ---
+    if st.button("Show Excel Network Parameters") and uploaded_file is not None:
+        st.session_state.show_results = True
+        # Generate map if not already generated
+        if st.session_state.map_obj is None and st.session_state.network_data is not None:
+            with st.spinner("Generating map..."):
+                st.session_state.map_obj = functions.create_map(st.session_state.network_data['df_line'],st.session_state.network_data['df_load'])
+
+    # --- Display Results ---
+    if st.session_state.show_results and st.session_state.network_data is not None:
+        
+        # Display Map
+        st.subheader("Transmission Network Map")
+        if st.session_state.map_obj is not None:
+            st.session_state.map_obj.to_streamlit(width=700, height=500)
+        else:
+            st.warning("Map could not be generated.")
+        
+        st.subheader("Network Parameters")
+
+        # Display Bus Parameters
+        st.write("### Bus Parameters")
+        st.dataframe(st.session_state.network_data['df_bus'])
+
+        # Display Load Parameters
+        st.write("### Load Parameters")
+        st.dataframe(st.session_state.network_data['df_load'])
+
+        # Display Generator Parameters
+        st.write("### Generator Parameters")
+        st.dataframe(st.session_state.network_data['df_gen'])
+
+        # Display Transformer Parameters (if exists)
+        if st.session_state.network_data['df_trafo'] is not None:
+            st.write("### Transformer Parameters")
+            st.dataframe(st.session_state.network_data['df_trafo'])
+
+        # Display Line Parameters
+        st.write("### Line Parameters")
+        st.dataframe(st.session_state.network_data['df_line'])
+
+        # Display Load Profile
+        st.write("### Load Profile")
+        st.dataframe(st.session_state.network_data['df_load_profile'])
+
+        # Display Generator Profile
+        st.write("### Generator Profile")
+        st.dataframe(st.session_state.network_data['df_gen_profile'])
+
+        
+
+
+    if uploaded_file is None and not st.session_state.show_results:
+        st.info("Please upload an Excel file to proceed.")
+
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -128,7 +350,7 @@ elif selection == "Historical Weather Exposure":
         # Add some space before the map
         #st.markdown("### \n\n")
         st.markdown("---")  # Horizontal divider
-        #st.markdown("## Map View")
+        st.markdown("## Map View")
        
         #opacity = st.slider("Select layer opacity", min_value=0.0, max_value=1.0, value=0.6, step=0.05)
         #st.write("Opacity: ", opacity)
@@ -137,10 +359,9 @@ elif selection == "Historical Weather Exposure":
         # Create an interactive map
         #Map = geemap.Map(center=[20, 0], zoom=2)
         #Map = geemap.Map(center=karachi, zoom=5)
-        Map = geemap.Map()
-        Map.centerObject(karachi, 5)
-        Map.addLayer(st.session_state.point_assets, {'color': 'red'}, 'Infrastructure Point Assets');
-        Map.addLayer(st.session_state.line_assets, {'color': 'red'}, 'Infrastructure Line Assets');
+        Map = st.session_state.map_obj
+        #Map.addLayer(st.session_state.point_assets, {'color': 'red'}, 'Infrastructure Point Assets');
+        #Map.addLayer(st.session_state.line_assets, {'color': 'red'}, 'Infrastructure Line Assets');
         era5Monthly = ee.ImageCollection('ECMWF/ERA5_LAND/MONTHLY_AGGR')
         era5MonthlyTemp = era5Monthly.select('temperature_2m').filterDate(selected_start).first().clip(roi)
         temp_vis = {
