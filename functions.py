@@ -853,7 +853,7 @@ def generate_line_outages(outage_hours, line_down, risk_scores,
 
         if len(numeric) == needed:                 # we have enough
             break
-
+            
     # pad with zeros if Page-2 returned fewer scores than lines
     numeric += [0] * (needed - len(numeric))
 
@@ -862,13 +862,13 @@ def generate_line_outages(outage_hours, line_down, risk_scores,
         (line[0], line[1], hour, score)
         for line, hour, score in zip(line_down, outage_hours, numeric)
     ]
-
+    
     # ── 3 · sort by our 2-key rule  (-score → descending) ──────────────
     combined.sort(key=lambda x: (-x[3], x[2]))     # (score desc, hour asc)
 
     # ── 4 · apply the 20 % cap if requested ────────────────────────────
     if capped_contingency_mode:
-        n_lines      = len(pd.read_excel(path, sheet_name="Line Parameters")) - 1
+        n_lines      = len(pd.read_excel(st.session_state.get("uploaded_file") , sheet_name="Line Parameters")) - 1
         capped_limit = math.floor(0.20 * n_lines)
         combined     = combined[:capped_limit]
 
@@ -1066,33 +1066,37 @@ def process_temperature(intensity, time_period, risk_score_threshold, df_line,ex
                             max_risk = props.get("max", 0)
                             from_bus = df.loc[line_id, "from_bus"]
                             to_bus = df.loc[line_id, "to_bus"]
-                            daily_results.append((int(from_bus), int(to_bus), int(max_risk)))
-                            risk_scores.append(int(max_risk))  # Add this line to collect risk scores
+                            daily_results.append((int(from_bus), int(to_bus), max_risk))
+                            risk_scores.append(max_risk)  # Add this line to collect risk scores
                             # if max_risk >= risk_score_threshold:
-                            #     risk_scores.append(int(max_risk))
+                            #     risk_scores.append(max_risk)
                             
                     
                             data.append({
                                 "line_id": props["line_id"],
                                 "from_bus": int(from_bus),
                                 "to_bus": int(to_bus),
-                                "risk_score": int(max_risk)
+                                "risk_score": max_risk
                             })
                     
                             risk_scores.append({
                                 "line_id": int(line_id),
                                 "from_bus": int(from_bus),
                                 "to_bus": int(to_bus),
-                                "risk_score": int(max_risk)
+                                "risk_score": max_risk
                             })
                         results_per_day.append(daily_results)
                         daily_dfs["Day_1"] = pd.DataFrame(data)
 
                         # Filter lines with risk score >= threshold
                         day_1_results = results_per_day[0]
-                        filtered_lines_day1 = [(from_bus, to_bus) for from_bus, to_bus, score in day_1_results if score >= risk_score_threshold]
+                        filtered_lines_day1 = \
+                        [(from_bus, to_bus) for from_bus, to_bus, score in day_1_results if score >= risk_score_threshold]
                         length_lines = len(filtered_lines_day1)
-                        outage_hour_day = [random.randint(11, 15) for _ in range(length_lines)]
+                        
+                        outage_hour_day = [0 for _ in range(length_lines)]
+
+                        st.write("Outage selection here")
 
                         # Create structured output for lines and outage hours
                         line_outages = [{"from_bus": from_bus, "to_bus": to_bus} for from_bus, to_bus in filtered_lines_day1]
@@ -1105,6 +1109,7 @@ def process_temperature(intensity, time_period, risk_score_threshold, df_line,ex
                             "hours": outage_hour_day,
                             "risk_scores": risk_scores
                         }
+                        
 
                         return m, daily_dfs["Day_1"], line_outage_data, outage_data, None, None, None, risk_scores  # Update this line
 

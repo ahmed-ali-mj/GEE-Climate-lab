@@ -20,6 +20,7 @@ from shapely.geometry import LineString, Point
 import plotly.express as px
 import functions
 
+
 # Set page configuration
 st.set_page_config(
     page_title="Continuous Monitoring of Climate Risks to Electricity Grid using Google Earth Engine",
@@ -54,6 +55,9 @@ if "uploaded_file_key" not in st.session_state:
     st.session_state.uploaded_file_key = None
 if "weather_map_obj" not in st.session_state:
     st.session_state.weather_map_obj = None
+
+if "high_temp_threshold_slider_value" not in st.session_state:
+        st.session_state.high_temp_threshold_slider_value = 25
 
 folium.Map.add_ee_layer = functions.add_ee_layer
 # ────────────────────────────────────────────────────────────────────────────
@@ -280,15 +284,15 @@ if selection == "Network Initialization":
 
             st.session_state.line_assets = line_fc
             
-            center_point = ee.Geometry.Point(avg_lon, avg_lat)
+            st.session_state.center_point = ee.Geometry.Point(avg_lon, avg_lat)
             
-            st.session_state.center_point = center_point
+            st.session_state.center_point = st.session_state.center_point
             
-            roi = center_point.buffer(600000).bounds()
+            roi = st.session_state.center_point.buffer(600000).bounds()
         
             st.session_state.roi = roi
             Map = geemap.Map()
-            Map.centerObject(center_point, 5)
+            Map.centerObject(st.session_state.center_point, 5)
             Map.addLayer(st.session_state.point_assets, {'color': 'red'}, 'Loads');
             Map.addLayer(st.session_state.line_assets, {'color': 'black'}, 'Transmission lines');
 
@@ -344,6 +348,10 @@ if selection == "Network Initialization":
 # Page 2 :  Historical Weather Exposure Analysis
 # ────────────────────────────────────────────────────────────────────────────
 elif selection == "Historical Weather Exposure":
+    
+    for k, v in st.session_state.items():
+        st.session_state[k] = v
+        
     st.header('Historical Weather Exposure Analysis')
     
     # Default date range
@@ -631,12 +639,14 @@ elif selection == "Historical Weather Exposure":
 # Page 3 :  Combination of Historical and Forecast Weather Exposure
 # ────────────────────────────────────────────────────────────────────────────
 elif selection == "Combined Historical and Forecast Weather Exposure":
+    for k, v in st.session_state.items():
+        st.session_state[k] = v
     st.header('Combination of Historical and Forecast Weather Exposure')
-
+    
     # Define region of interest (global extent here)
     #roi = ee.Geometry.Rectangle([-180, -90, 180, 90])
-    karachi = ee.Geometry.Point(67.0011, 24.8607)
-    roi = karachi.buffer(600000).bounds()
+    #karachi = ee.Geometry.Point(67.0011, 24.8607)
+    #roi = karachi.buffer(600000).bounds()
     #roi = ee.Geometry.BBox(60, 23, 78, 38);  # e.g., Pakistan
     if "point_assets" not in st.session_state:
         st.session_state.point_assets = ee.FeatureCollection([
@@ -672,37 +682,28 @@ elif selection == "Combined Historical and Forecast Weather Exposure":
     selected_start = ee.Date(str(selected_start))
     selected_end = ee.Date(str(selected_end))
 
-    #high_temp_threshold = st.slider(
-    #    "Select maximum acceptable monthly mean temperature (°C)",
-    #    min_value=-20.0,
-    #    max_value=50.0,
-    #    value=25.0,
-    #    step=0.5
-    #)
-
+    
+    
     col1, col2 = st.columns([4, 4])  # Adjust width ratio as needed
-
+    
     with col1:
         st.write("")
         st.write("")
         st.write("Select maximum acceptable monthly mean temperature (°C)")
-
+    
     with col2:
-        high_temp_threshold = st.slider(
+        st.slider(
             label="",
             min_value=-20,
             max_value=50,
-            value=40,
+            value=st.session_state.high_temp_threshold_slider_value,
+            key='high_temp_threshold_slider',
             step=1
         )
+    high_temp_threshold = st.session_state.high_temp_threshold_slider_value
     
-    #low_temp_threshold = st.slider(
-    #    "Select minimum acceptable monthly mean temperature (°C)",
-    #    min_value=-20.0,
-    #    max_value=50.0,
-    #    value=10.0,
-    #    step=0.5
-    #)
+    if "low_temp_threshold_slider_value" not in st.session_state:    
+        st.session_state.low_temp_threshold_slider_value = 10
     
     col1, col2 = st.columns([4, 4])  # Adjust width ratio as needed
     
@@ -712,21 +713,20 @@ elif selection == "Combined Historical and Forecast Weather Exposure":
         st.write("Select minimum acceptable monthly mean temperature (°C)")
 
     with col2:
-        low_temp_threshold = st.slider(
+        st.session_state.low_temp_threshold_slider_value = st.slider(
             label="",
             min_value=-20,
             max_value=50,
-            value=10,
+            key='low_temp_threshold_slider',
+            value=st.session_state.low_temp_threshold_slider_value,
             step=1
         )
 
-    #high_precip_threshold = st.slider(
-    #    "Select maximum acceptable monthly rainfall (mm)",
-    #    min_value=10,
-    #    max_value=250,
-    #    value=50,
-    #    step=5
-    #)
+    low_temp_threshold = st.session_state.low_temp_threshold_slider_value
+    
+    
+    if "high_precip_threshold_slider_value" not in st.session_state:    
+        st.session_state.high_precip_threshold_slider_value = 100
     
     col1, col2 = st.columns([4, 4])  # Adjust width ratio as needed
     
@@ -736,14 +736,18 @@ elif selection == "Combined Historical and Forecast Weather Exposure":
         st.write("Select maximum acceptable monthly rainfall (mm)")
 
     with col2:
-        high_precip_threshold = st.slider(
+        st.session_state.high_precip_threshold_slider_value = st.slider(
             label="",
             min_value=10,
             max_value=250,
-            value=40,
+            key='high_precip_threshold_slider',
+            value=st.session_state.high_precip_threshold_slider_value,
             step=5
         )
-            
+    high_precip_threshold = st.session_state.high_precip_threshold_slider_value
+    
+    
+    
     highTempLimit = ee.Number(high_temp_threshold)
     lowTempLimit = ee.Number(low_temp_threshold)
     highPrecipLimit = ee.Number(high_precip_threshold)
@@ -754,15 +758,19 @@ elif selection == "Combined Historical and Forecast Weather Exposure":
     #weightHistoricalMaxTempViolations = st.number_input("Weightage of max temperature violations:", value=0.34)
     #weightHistoricalMinTempViolations = st.number_input("Weightage of min temperature violations:", value=0.33)
     #weightHistoricalRainfallViolations = st.number_input("Weightage of rainfall violations:", value=0.33)
-    
-    slider_range = st.slider(
+    if "slider_range_values" not in st.session_state:
+        st.session_state.slider_range_values = (0.8,0.9)
+    st.session_state.slider_range_values = st.slider(
             "Adjust the split ",
-            0.0, 1.0, (0.2, 0.7), step=0.01
+            0.0, 1.0, 
+            value = st.session_state.slider_range_values, 
+            key = 'slider_range',
+            step=0.01
         )
-
-    weightHistoricalMaxTempViolations = slider_range[0]
-    weightHistoricalMinTempViolations = slider_range[1] - slider_range[0]
-    weightHistoricalRainfallViolations = 1.0 - slider_range[1]
+    
+    weightHistoricalMaxTempViolations = st.session_state.slider_range_values[0]
+    weightHistoricalMinTempViolations = st.session_state.slider_range_values[1] - st.session_state.slider_range_values[0]
+    weightHistoricalRainfallViolations = 1.0 - st.session_state.slider_range_values[1]
     
     st.write(f"Weight for max temperature violations = {weightHistoricalMaxTempViolations:.2f}")
     st.write(f"Weight for min temperature violations = {weightHistoricalMinTempViolations:.2f}")
@@ -771,13 +779,8 @@ elif selection == "Combined Historical and Forecast Weather Exposure":
     st.markdown("---")  # Horizontal divider
     st.markdown("##### Parameters for Forecast Weather Exposure")
 
-    #high_forecast_temp_threshold = st.slider(
-    #    "Select maximum acceptable forecast temperature (°C)",
-    #    min_value=10.0,
-    #    max_value=50.0,
-    #    value=30.0,
-    #    step=0.5
-    #)
+    if "high_forecast_temp_threshold_slider_value" not in st.session_state:    
+        st.session_state.high_forecast_temp_threshold_slider_value = 30.0
     
     col1, col2 = st.columns([4, 4])  # Adjust width ratio as needed
     
@@ -787,25 +790,23 @@ elif selection == "Combined Historical and Forecast Weather Exposure":
         st.write("Select maximum acceptable forecast temperature (°C)")
 
     with col2:
-        high_forecast_temp_threshold = st.slider(
+        st.session_state.high_forecast_temp_threshold_slider_value = st.slider(
             label="",
             min_value=10.0,
             max_value=50.0,
-            value=30.0,
+            value=st.session_state.high_forecast_temp_threshold_slider_value,
+            key='high_forecast_temp_threshold',
             step=0.5
         )    
-
+    high_forecast_temp_threshold = st.session_state.high_forecast_temp_threshold_slider_value
     highForecastTempLimit = ee.Number(high_forecast_temp_threshold)
     maxForecastTempPossible = ee.Number(50.0)
     highForecastTempRange = maxForecastTempPossible.subtract(highForecastTempLimit)
 
-    #high_forecast_precip_threshold = st.slider(
-    #    "Select maximum acceptable forecast rainfall (mm)",
-    #    min_value=10,
-    #    max_value=200,
-    #    value=20,
-    #    step=5
-    #)
+    
+    
+    if "high_forecast_precip_threshold_slider_value" not in st.session_state:    
+        st.session_state.high_forecast_precip_threshold_slider_value = 30
     
     col1, col2 = st.columns([4, 4])  # Adjust width ratio as needed
     
@@ -815,39 +816,45 @@ elif selection == "Combined Historical and Forecast Weather Exposure":
         st.write("Select maximum acceptable forecast rainfall (mm)")
 
     with col2:
-        high_forecast_precip_threshold = st.slider(
+        st.session_state.high_forecast_precip_threshold_slider_value = st.slider(
             label="",
             min_value=10,
             max_value=200,
-            value=20,
+            value=st.session_state.high_forecast_precip_threshold_slider_value,
+            key='high_forecast_precip_threshold',
             step=5
         ) 
 
-    highForecastRainfallLimit = ee.Number(high_forecast_precip_threshold)
+    highForecastRainfallLimit = ee.Number(st.session_state.high_forecast_precip_threshold_slider_value)
     maxForecastRainfallPossible = ee.Number(200.0)
     highForecastRainfallRange = maxForecastRainfallPossible.subtract(highForecastRainfallLimit)
     
     #st.write("Provide the weightage of forecast temperature and rainfall to calculate the combined forecast exposure score:")
     #st.write("(These weights must add up to 1.)")
     
+    if "forecast_Temperature_Weightage_slider_value" not in st.session_state:    
+        st.session_state.forecast_Temperature_Weightage_slider_value = 0.7
+    
+    
     col1, col2 = st.columns([4, 4])  # Adjust width ratio as needed
     
     with col1:
         st.write("")
         st.write("")
-        st.write("Provide the weightage of forecast temperature and rainfall to calculate the combined forecast exposure score:")
+        st.write("Provide the weightage of forecast temperature to forecast rainfall to calculate the combined forecast exposure score:")
 
     with col2:
-        forecastTemperatureWeightage = st.slider(
+        forecast_Temperature_Weightage_slider_value = st.slider(
             label="",
             min_value=0.0,
             max_value=1.0,
-            value=0.5,
+            value=st.session_state.forecast_Temperature_Weightage_slider_value,
+            key='forecast_Temperature_Weightage_slider',
             step=0.01
-        ) 
+        )
+    forecastTemperatureWeightage = forecast_Temperature_Weightage_slider_value   
     forecastRainfallWeightage = 1-forecastTemperatureWeightage
-    #forecastTemperatureWeightage = st.number_input("Weightage of Forecast Temperature Exposure:", value=0.5)
-    #forecastRainfallWeightage = st.number_input("Weightage of Forecast Rainfall Exposure:", value=0.5)
+    
     
     st.write(f"Weight for Forecast Temperature Exposure: = {forecastTemperatureWeightage:.2f}")
     st.write(f"Weight for Forecast Rainfall Exposure: = {forecastRainfallWeightage:.2f}")
@@ -862,6 +869,8 @@ elif selection == "Combined Historical and Forecast Weather Exposure":
     #historicalWeightage = st.number_input("Weightage of Historical Exposure:", value=0.6)
     #forecastWeightage = st.number_input("Weightage of Forecast Exposure:", value=0.4)
     
+    if "historicalWeightage_slider_value" not in st.session_state:    
+        st.session_state.historicalWeightage_slider_value = 0.7
     
     col1, col2 = st.columns([4, 4])  # Adjust width ratio as needed
     
@@ -870,14 +879,15 @@ elif selection == "Combined Historical and Forecast Weather Exposure":
         st.write("Provide the weightage of historical exposure compared to forecast exposure:")
 
     with col2:
-        historicalWeightage = st.slider(
+        st.session_state.historicalWeightage = st.slider(
             label="",
             min_value=0.0,
             max_value=1.0,
-            value=0.5,
+            value=st.session_state.historicalWeightage_slider_value,
             step=0.01,
             key="historical_slider"
-        ) 
+        )
+    historicalWeightage = st.session_state.historicalWeightage_slider_value
     forecastWeightage = 1-historicalWeightage
     
     st.write(f"Weight for Historical Exposure: = {historicalWeightage:.2f}")
@@ -897,6 +907,7 @@ elif selection == "Combined Historical and Forecast Weather Exposure":
     .select('total_precipitation_sum');
 
     #Clip each image in the collection to the ROI
+    roi = st.session_state.roi
     clippedMonthlyTemp = era5MonthlyTemp.map(lambda img: img.clip(roi))
     clippedMonthlyTempCelsius = clippedMonthlyTemp.map(lambda img: img.subtract(273.5))
 
@@ -1037,12 +1048,12 @@ elif selection == "Combined Historical and Forecast Weather Exposure":
     Map.addLayer(forecastRainfallImg, rainfall_vis_params, f"Rainfall (mm) at hour {forecast_hour}", shown=False)
     Map.add_colorbar(rainfall_vis_params, label="mm")
     Map.addLayer(finalForecastTempRatioImg, ratio_vis, f"High Temp Ratio ({high_forecast_temp_threshold} °C)", shown=False) 
-    Map.addLayer(finalForecastRainfallRatioImg, ratio_vis, f"High Rainfall Ratio ({high_forecast_precip_threshold} mm)", shown=False) 
+    Map.addLayer(finalForecastRainfallRatioImg, ratio_vis, f"High Rainfall Ratio ({st.session_state.high_forecast_precip_threshold_slider_value} mm)", shown=False) 
     Map.add_colorbar(ratio_vis, label="Exposure Ratio (0-1)")
-    Map.addLayer(combinedForecastScore, ratio_vis, f"Combined Forecast Exposure Score ({high_forecast_temp_threshold} °C,{high_forecast_precip_threshold} mm)", shown=False)
+    Map.addLayer(combinedForecastScore, ratio_vis, f"Combined Forecast Exposure Score ({high_forecast_temp_threshold} °C,{st.session_state.high_forecast_precip_threshold_slider_value} mm)", shown=False)
 
     st.session_state["exposure_score"] = combinedExposureScore
-    Map.addLayer(combinedExposureScore, ratio_vis, f"Combined Historical and Forecast Exposure Score ( Historical Weightage: {historicalWeightage}, Forecast Weightage: {forecastWeightage})")
+    Map.addLayer(combinedExposureScore, ratio_vis, f"Combined Historical and Forecast Exposure Score ( Historical Weightage: {st.session_state.historicalWeightage_slider_value}, Forecast Weightage: {forecastWeightage})")
 
     Map.addLayerControl()
 
@@ -1377,7 +1388,33 @@ elif selection == "Experimental Page 3":
 elif selection == "Optimal power flow":
 
     st.header('Projected Operation - Under Current OPF')
+    
+    for k, v in st.session_state.items():
+        st.session_state[k] = v
     # ── PERSISTENT STORAGE (add right after st.title(...)) ────────────────────
+    
+    
+    if "risk_threshold_slider_value" not in st.session_state:    
+        st.session_state.risk_threshold_slider_value = 0.7
+    
+    col1, col2 = st.columns([4, 4])  # Adjust width ratio as needed
+    
+    with col1:
+        st.write("")
+        st.write("Provide the risk score above which transmission line fails:")
+
+    with col2:
+        st.session_state.risk_threshold_slider_value = st.slider(
+            label="",
+            min_value=0.0,
+            max_value=1.0,
+            value=st.session_state.risk_threshold_slider_value,
+            step=0.01,
+            key="risk_threshold_slider"
+        )
+    risk_threshold = st.session_state.risk_threshold_slider_value
+    
+    
     for k, v in (
         ("bau_ready",                          False),
         ("bau_day_end_df",                     None),
@@ -1400,10 +1437,11 @@ elif selection == "Optimal power flow":
     cap_flag = (mode == "Capped Contingency Mode (20% of Network Lines)")
     
     if st.button("Run Current Optimal Power Flow (OPF) Analysis"):
-        weather_map, risk_df, line_outage_data, outage_data, max_occurrence_t, max_occurrence_p, max_occurrence_w, risk_scores = functions.process_temperature(
+        weather_map, risk_df, line_outage_data, outage_data, max_occurrence_t, max_occurrence_p, max_occurrence_w, risk_scores = \
+        functions.process_temperature(
                     "High",
                     "Monthly",
-                    0.5,
+                    risk_threshold,
                     st.session_state.network_data['df_line'],
                     st.session_state["exposure_score"]
                     )
@@ -1415,7 +1453,7 @@ elif selection == "Optimal power flow":
         st.session_state["risk_scores"]  = line_outage_data["risk_scores"]
         st.session_state.risk_df = risk_df
         st.session_state.outage_data = outage_data
-        st.session_state.risk_score = 0.5
+        st.session_state.risk_score = risk_threshold
         st.session_state.max_occurrences = {
             "temperature": max_occurrence_t,
             "precipitation": max_occurrence_p,
@@ -1429,8 +1467,7 @@ elif selection == "Optimal power flow":
             risk_scores    = st.session_state["risk_scores"],
             capped_contingency_mode = cap_flag
         )
-        st.session_state.line_outages = line_outages 
-    
+        st.session_state.line_outages = line_outages
         # store globally for helper functions
         globals()["line_outages"] = line_outages
         
@@ -1559,7 +1596,21 @@ elif selection == "Optimal power flow":
         )
         gdf["idx"]     = gdf.index
         gdf["loading"] = gdf["idx"].map(lambda i: loading_rec[i] if i < len(loading_rec) else 0.0)
-
+        
+        
+        
+        
+        
+        
+        
+        #Here
+        
+        
+        
+        
+        
+        
+        
         # mark weather-down equipment
         weather_down = set()
         for fbus, tbus, start_hr in outages:
@@ -1576,7 +1627,8 @@ elif selection == "Optimal power flow":
         gdf["down_weather"] = gdf["idx"].isin(weather_down)
 
         # Folium map
-        m = folium.Map(location=[27, 66.5], zoom_start=6, width=800, height=600)
+        coords = st.session_state.center_point.coordinates().getInfo()
+        m = folium.Map(location=[coords[1], coords[0]], zoom_start=6, width=800, height=600)
         max_line_cap = st.session_state.max_loading_capacity
         max_trf_cap  = st.session_state.get("max_loading_capacity_transformer", max_line_cap)
         no_of_lines  = len(df_line)
