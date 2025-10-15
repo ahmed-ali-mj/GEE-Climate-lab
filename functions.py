@@ -126,6 +126,7 @@ def current_opf(line_outages):
 
         # 6-a) Apply scheduled outages
         for (fbus, tbus, start_hr) in line_outages:
+            st.write(start_hr)
             if hour < start_hr:
                 continue
             is_trafo = check_bus_pair(path, (fbus, tbus))
@@ -300,43 +301,6 @@ def current_opf(line_outages):
 
 
 
-
-
-# Shared function: Add EE Layer to Folium Map (used in both pages)
-def add_ee_layer(self, ee_object, vis_params, name):
-    try:
-        if isinstance(ee_object, ee.image.Image):
-            map_id_dict = ee.Image(ee_object).getMapId(vis_params)
-            folium.raster_layers.TileLayer(
-                tiles=map_id_dict['tile_fetcher'].url_format,
-                attr='Google Earth Engine',
-                name=name,
-                overlay=True,
-                control=True
-            ).add_to(self)
-        elif isinstance(ee_object, ee.imagecollection.ImageCollection):
-            ee_object_new = ee_object.mosaic()
-            map_id_dict = ee.Image(ee_object_new).getMapId(vis_params)
-            folium.raster_layers.TileLayer(
-                tiles=map_id_dict['tile_fetcher'].url_format,
-                attr='Google Earth Engine',
-                name=name,
-                overlay=True,
-                control=True
-            ).add_to(self)
-        elif isinstance(ee_object, ee.geometry.Geometry) or isinstance(ee_object, ee.feature.Feature) or isinstance(ee_object, ee.featurecollection.FeatureCollection):
-            map_id_dict = ee_object.getMapId(vis_params)
-            folium.raster_layers.TileLayer(
-                tiles=map_id_dict['tile_fetcher'].url_format,
-                attr='Google Earth Engine',
-                name=name,
-                overlay=True,
-                control=True
-            ).add_to(self)
-        else:
-            print("Could not add EE layer of type {}".format(type(ee_object)))
-    except Exception as e:
-        print(f"Error adding EE layer: {e}")
 
 
 
@@ -873,119 +837,9 @@ def generate_line_outages(outage_hours, line_down, risk_scores,
         combined     = combined[:capped_limit]
 
     # ── 5 · return what the rest of the code expects ───────────────────
+    
     return [(f, t, hr) for f, t, hr, _ in combined]
 
-
-
-# === Parse and create EE FeatureCollection for load points ===
-def parse_point(row):
-    try:
-        lon, lat = eval(row["load_coordinates"])
-        return ee.Feature(ee.Geometry.Point([lat, lon]), {'name': str(row.get('name', 'Load'))})
-    except:
-        return None
-
-def compute_average_lat_lon(df_load):
-    lon_list = []
-    lat_list = []
-
-    for _, row in df_load.iterrows():
-        try:
-            lat, lon = eval(row["load_coordinates"])  # assumes format "(70.123, 30.456)"
-            lon_list.append(float(lon))
-            lat_list.append(float(lat))
-        except Exception as e:
-            print(f"Skipping row: {e}")
-
-    if lon_list and lat_list:
-        avg_lon = sum(lon_list) / len(lon_list)
-        avg_lat = sum(lat_list) / len(lat_list)
-        return avg_lat, avg_lon
-    else:
-        return None, None
-
-
-
-
-# Shared function: Create and display the map (used in Network Initialization)
-def create_map(df_line, df_load):
-
-    try:
-        point_features = [parse_point(row) for _, row in df_load.iterrows()]
-        point_features = [f for f in point_features if f is not None]
-        point_fc = ee.FeatureCollection(point_features)
-
-
-        st.session_state.point_assets = point_fc
-
-
-        # Create base map
-        avg_lat, avg_lon = compute_average_lat_lon(df_load)
-        
-        
-        #m = folium.Map(location=[avg_lat, avg_lon], zoom_start=5, width=700, height=500)
-
-
-        # === Parse and create EE FeatureCollection for transmission lines ===
-        df_line["geodata"] = df_line["geodata"].apply(
-            lambda x: [(lon, lat) for lat, lon in eval(x)] if isinstance(x, str) else x
-        )
-        line_features = [
-            ee.Feature(ee.Geometry.LineString(row["geodata"]))
-            for _, row in df_line.iterrows()
-        ]
-        line_fc = ee.FeatureCollection(line_features)
-
-
-        st.session_state.line_assets = line_fc
-        
-        
-        
-        
-        center_point = ee.Geometry.Point(avg_lon, avg_lat)
-        
-        st.session_state.center_point = center_point
-        
-        roi = center_point.buffer(600000).bounds()
-    
-        st.session_state.roi = roi
-        Map = geemap.Map()
-        Map.centerObject(center_point, 5)
-        Map.addLayer(st.session_state.point_assets, {'color': 'red'}, 'Infrastructure Point Assets');
-        Map.addLayer(st.session_state.line_assets, {'color': 'black'}, 'Infrastructure Line Assets');
-
-        # Add layer control
-        Map.addLayerControl()
-
-        # Render the map in Streamlit
-        #Map.to_streamlit(width=700, height=500)
-        '''
-        # Add transmission lines to map
-        m.add_ee_layer(
-            line_fc.style(**{'color': 'red', 'width': 2}),
-            {},
-            "Transmission Lines"
-        )
-       
-        
-
-        # Add load points to map
-        m.add_ee_layer(
-            point_fc.style(**{'color': 'blue', 'pointSize': 5, 'fillColor': 'blue'}),
-            {},
-            "Load"
-        )
-
-        # Layer control
-        folium.LayerControl(collapsed=False).add_to(m)
-
-        
-        '''
-        
-        return Map
-    except Exception as e:
-        st.error(f"Error creating map: {str(e)}")
-        return None
 
 #def process_temperature(intensity, time_period, risk_score_threshold, df_line):
 def process_temperature(intensity, time_period, risk_score_threshold, df_line,exposure_score):
@@ -1094,7 +948,7 @@ def process_temperature(intensity, time_period, risk_score_threshold, df_line,ex
                         [(from_bus, to_bus) for from_bus, to_bus, score in day_1_results if score >= risk_score_threshold]
                         length_lines = len(filtered_lines_day1)
                         
-                        outage_hour_day = [0 for _ in range(length_lines)]
+                        outage_hour_day = [2 for _ in range(length_lines)]
 
                         st.write("Outage selection here")
 
@@ -1110,7 +964,7 @@ def process_temperature(intensity, time_period, risk_score_threshold, df_line,ex
                             "risk_scores": risk_scores
                         }
                         
-
+                        st.write(line_outage_data)
                         return m, daily_dfs["Day_1"], line_outage_data, outage_data, None, None, None, risk_scores  # Update this line
 
 
