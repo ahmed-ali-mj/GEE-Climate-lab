@@ -355,7 +355,7 @@ for x in range(forecast_range):
 
     clippedForecastImg = forecastImg.clip(roi)
     forecastTempImg[x] = clippedForecastImg.select('temperature_2m_above_ground')
-    forecastRainfallImg[x] = clippedForecastImg.select('total_precipitation_surface')
+    forecastRainfallImg[x] = clippedForecastImg.select('precipitation_rate')
 
 
     # Convert temperature to a ratio (0-1), indicating how high the temperature is from the acceptable limit. 
@@ -373,6 +373,15 @@ for x in range(forecast_range):
     #historicalWeightage = 0.9
     #forecastWeightage = 0.1
     combinedExposureScore[x] = (combinedHistoricalScore.multiply(historicalWeightage)).add(combinedForecastScore[x].multiply(forecastWeightage)).rename("avg_combined_score")
+
+
+
+#Average out all risk exposures
+avgscore = combinedExposureScore[0]
+for x in range(1,forecast_range):
+    avgscore = avgscore.add(combinedExposureScore[x])
+avgscore.divide(forecast_range)
+
 
 # Visualization parameters
 opacity = 0.6
@@ -432,7 +441,10 @@ Map.addLayer(finalForecastRainfallRatioImg[forecast_hour], ratio_vis, f"High Rai
 Map.add_colorbar(ratio_vis, label="Exposure Ratio (0-1)")
 Map.addLayer(combinedForecastScore[forecast_hour], ratio_vis, f"Combined Forecast Exposure Score ({high_forecast_temp_threshold} °C,{st.session_state.high_forecast_precip_threshold_slider_value} mm)", shown=False)
 
-st.session_state["exposure_score"] = combinedExposureScore[forecast_hour]
+
+st.session_state["exposure_score"] = combinedExposureScore[0]
+st.session_state["forecast_range"] = forecast_range
+
 Map.addLayer(combinedExposureScore[forecast_hour], ratio_vis, f"Combined Historical and Forecast Exposure Score ( Historical Weightage: {st.session_state.historicalWeightage3_slider_value}, Forecast Weightage: {forecastWeightage})")
 
 Map.addLayerControl()

@@ -60,29 +60,23 @@ for k, v in (
 cap_flag = False
 
 if st.button("Run Power flow Analysis"):
-    weather_map, risk_df, line_outage_data, outage_data, max_occurrence_t, max_occurrence_p, max_occurrence_w, risk_scores = \
+    
+    line_outage_data, outage_data, risk_scores = \
     functions.process_temperature(
-                "High",
-                "Monthly",
                 risk_threshold,
                 st.session_state.network_data['df_line'],
                 st.session_state["exposure_score"]
                 )
     
     # Store the map and data in session state
-    st.session_state.weather_map_obj = weather_map
+    # st.session_state.weather_map_obj = weather_map
     st.session_state.line_outage_data = line_outage_data
     st.session_state["outage_hours"] = line_outage_data["hours"]
     st.session_state["line_down"]    = line_outage_data["lines"]
     st.session_state["risk_scores"]  = line_outage_data["risk_scores"]
-    st.session_state.risk_df = risk_df
+    # st.session_state.risk_df2 = risk_df
     st.session_state.outage_data = outage_data
     st.session_state.risk_score = risk_threshold
-    st.session_state.max_occurrences = {
-        "temperature": max_occurrence_t,
-        "precipitation": max_occurrence_p,
-        "wind": max_occurrence_w
-    }
 
     # build the outage list first
     line_outages = functions.generate_line_outages(

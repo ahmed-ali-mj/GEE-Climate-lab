@@ -123,10 +123,10 @@ def current_opf(line_outages):
     # ----------------------------------------------------------------------
     for hour in range(num_hours):
         # print(f"========== HOUR {hour} ==========")
-
+        
         # 6-a) Apply scheduled outages
         for (fbus, tbus, start_hr) in line_outages:
-            st.write(start_hr)
+            st.write(fbus, tbus, start_hr)
             if hour < start_hr:
                 continue
             is_trafo = check_bus_pair(path, (fbus, tbus))
@@ -842,14 +842,7 @@ def generate_line_outages(outage_hours, line_down, risk_scores,
 
 
 #def process_temperature(intensity, time_period, risk_score_threshold, df_line):
-def process_temperature(intensity, time_period, risk_score_threshold, df_line,exposure_score):
-                        # Temperature thresholds for intensity levels
-                        thresholds = {"Low": 35, "Medium": 38, "High": 41}
-                        thresholds_p = {"Low": 50, "Medium": 100, "High": 150}
-                        thresholds_w = {"Low": 10, "Medium": 15, "High": 20}
-
-                        if intensity not in thresholds or time_period not in ["Monthly", "Weekly"]:
-                            raise ValueError("Invalid intensity or time period")
+def process_temperature(risk_score_threshold, df_line,exposure_score):
 
                         # Use the transmission line data from session state
                         df = df_line.copy()
@@ -865,16 +858,7 @@ def process_temperature(intensity, time_period, risk_score_threshold, df_line,ex
                         # Create Folium map (instead of geemap.Map)
                         m = folium.Map(location=[30, 70], zoom_start=5, width=800, height=600)
 
-                        # Define date range (last 10 years)
-                        end_date = datetime.now()
-                        start_date = end_date - timedelta(days=365 * 10)
-
-                        # Select dataset based on time period
-                        dataset_name = "ECMWF/ERA5/MONTHLY" if time_period == "Monthly" else "ECMWF/ERA5_LAND/DAILY_AGGR"
-                        dataset = ee.ImageCollection(dataset_name).filterDate(start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
-
-                        dataset_forecast = ee.ImageCollection("NOAA/GFS0P25")
-                        d = dataset_forecast.first()
+                        
 
                         # Create land mask
                         land_mask = ee.FeatureCollection("USDOS/LSIB_SIMPLE/2017")
@@ -948,7 +932,7 @@ def process_temperature(intensity, time_period, risk_score_threshold, df_line,ex
                         [(from_bus, to_bus) for from_bus, to_bus, score in day_1_results if score >= risk_score_threshold]
                         length_lines = len(filtered_lines_day1)
                         
-                        outage_hour_day = [2 for _ in range(length_lines)]
+                        outage_hour_day = [0 for _ in range(length_lines)]
 
                         st.write("Outage selection here")
 
@@ -964,8 +948,7 @@ def process_temperature(intensity, time_period, risk_score_threshold, df_line,ex
                             "risk_scores": risk_scores
                         }
                         
-                        st.write(line_outage_data)
-                        return m, daily_dfs["Day_1"], line_outage_data, outage_data, None, None, None, risk_scores  # Update this line
+                        return line_outage_data, outage_data, risk_scores  # Update this line
 
 
 def weather_opf(line_outages):
