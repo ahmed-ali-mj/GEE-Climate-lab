@@ -18,6 +18,7 @@ import traceback
 import plotly.graph_objects as go
 from shapely.geometry import LineString, Point
 import plotly.express as px
+import time
 
 
 def Network_initialize():
@@ -32,7 +33,7 @@ def overloaded_transformer_colab(net):
 # ---------------------------------------------------------------------------
 # MAIN FUNCTION – unchanged numerical logic, no prints, returns DataFrames
 # ---------------------------------------------------------------------------
-def current_opf(line_outages):
+def current_opf(line_outages_hourly):
     df_trafo = []
     
     path = st.session_state.get("uploaded_file")   # BytesIO object
@@ -116,6 +117,7 @@ def current_opf(line_outages):
     gen_per_hour_bau    = []
     slack_per_hour_bau  = []
     shedding_buses      = []
+    isolated_loads      = [None] * 24
     seen_buses          = set()
 
     # ----------------------------------------------------------------------
@@ -123,10 +125,10 @@ def current_opf(line_outages):
     # ----------------------------------------------------------------------
     for hour in range(num_hours):
         # print(f"========== HOUR {hour} ==========")
-        
+        line_outages = line_outages_hourly[hour]
         # 6-a) Apply scheduled outages
+        
         for (fbus, tbus, start_hr) in line_outages:
-            st.write(fbus, tbus, start_hr)
             if hour < start_hr:
                 continue
             is_trafo = check_bus_pair(path, (fbus, tbus))
@@ -171,12 +173,26 @@ def current_opf(line_outages):
             inter = transform_loading(net.res_line["loading_percent"])
             if "Transformer Parameters" in xls.sheet_names:
                 inter.extend(transform_loading(net.res_trafo["loading_percent"].tolist()))
+            
             loading_records.append(inter)
             loading_percent_bau.append(inter.copy())
         else:
             loading_records.append([0]*(len(net.res_line)+len(df_trafo)))
             loading_percent_bau.append([0]*(len(net.res_line)+len(df_trafo)))
+        
+        
+        # Buses that got results
+        supplied_buses = net.res_bus.index
+        # Buses that exist but are not in results
+        unsupplied_buses = set(net.bus.index) - set(supplied_buses)
+        
+        unsupplied_buses = net.res_bus[net.res_bus.vm_pu.isna()].index
 
+        # Now find loads attached to them
+        unsupplied_loads = net.load[net.load.bus.isin(unsupplied_buses)]
+        
+        isolated_loads[hour] = unsupplied_loads
+        
         # 6-e) Check overloads and shed if needed
         overloads       = overloaded_lines(net)
         overloads_trafo = overloaded_transformer_colab(net)
@@ -285,15 +301,44 @@ def current_opf(line_outages):
         "Hour": list(range(len(business_as_usuall_cost))),
         "Current OPF Generation Cost (PKR)": business_as_usuall_cost
     })
-
+    
+    st.dataframe(st.session_state.bau_day_end_df, use_container_width=True)
     # ----------------------------------------------------------------------
     # 9. Return everything Colab returned *plus* the two DataFrames
     # ----------------------------------------------------------------------
+    
+    
+    #hourly_shed_bau     = [0] * num_hours
+    #loading_records     = []
+    #loading_percent_bau = []
+    #served_load_per_hour= []
+    #gen_per_hour_bau    = []
+    #slack_per_hour_bau  = []
+    #shedding_buses      = []
+    
+    summary_rows = []
+
+    for x in range(num_hours):
+        row = {
+            "Hour": x,
+            "Load Shedding (MWh)": hourly_shed_bau[x]
+        }
+
+        # Add each element of loading_percent_bau[x] as a separate column
+        for i, val in enumerate(loading_percent_bau[x]):
+            row[f"Line {i+1} Loading (%)"] = val
+
+        summary_rows.append(row)
+
+    hourly_line_data = pd.DataFrame(summary_rows)
+    
+    time.sleep(10)
+    
     return (loading_percent_bau, served_load_per_hour, gen_per_hour_bau,
             slack_per_hour_bau, loading_records, business_as_usuall_cost,
             hourly_shed_bau, seen_buses, shedding_buses, df_lines, df_trafo,
             load_df, line_idx_map, trafo_idx_map, gdf,
-            day_end_df, hourly_cost_df)
+            day_end_df, hourly_cost_df,hourly_line_data,isolated_loads)
 
 
 
@@ -934,7 +979,7 @@ def process_temperature(risk_score_threshold, df_line,exposure_score):
                         
                         outage_hour_day = [0 for _ in range(length_lines)]
 
-                        st.write("Outage selection here")
+                        #st.write("Outage selection here")
 
                         # Create structured output for lines and outage hours
                         line_outages = [{"from_bus": from_bus, "to_bus": to_bus} for from_bus, to_bus in filtered_lines_day1]
