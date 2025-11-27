@@ -85,4 +85,21 @@ Assistant Professor, Electrical & Computer Engineering, Habib University
 ## 🙌 Acknowledgements
 This project is inspired by and extends the work by:
 
-- **M**
+- **Muhammad Hasan Khan** – BSc Electrical Engineering  
+  📧 iamhasan710@gmail.com |  
+  [LinkedIn](https://www.linkedin.com/in/hasankhan710)
+
+- **Munim ul Haq** – BSc Electrical Engineering  
+  📧 themunimulhaq24@gmail.com |  
+  [LinkedIn](https://www.linkedin.com/in/munim-ul-haq/)
+
+- **Syed Muhammad Ammar Ali Jaffri** – BSc Electrical Engineering  
+  📧 ammarjaffri6515@gmail.com |  
+  [LinkedIn](https://www.linkedin.com/in/ammarjaffri/)
+
+📄 **Detailed Thesis (PDF):**  
+<https://drive.google.com/drive/folders/1mzGOuPhHn2UryrB2q5K4AZH2bPutvNhF?usp=drive_link>
+
+---
+
+_We welcome feedback and collaboration inquiries._
