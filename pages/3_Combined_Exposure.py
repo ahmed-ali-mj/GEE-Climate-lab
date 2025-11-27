@@ -442,7 +442,7 @@ Map.add_colorbar(ratio_vis, label="Exposure Ratio (0-1)")
 Map.addLayer(combinedForecastScore[forecast_hour], ratio_vis, f"Combined Forecast Exposure Score ({high_forecast_temp_threshold} °C,{st.session_state.high_forecast_precip_threshold_slider_value} mm)", shown=False)
 
 
-st.session_state["exposure_score"] = combinedExposureScore[0]
+st.session_state["exposure_score"] = combinedExposureScore
 st.session_state["forecast_range"] = forecast_range
 
 Map.addLayer(combinedExposureScore[forecast_hour], ratio_vis, f"Combined Historical and Forecast Exposure Score ( Historical Weightage: {st.session_state.historicalWeightage3_slider_value}, Forecast Weightage: {forecastWeightage})")

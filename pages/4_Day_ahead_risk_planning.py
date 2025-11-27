@@ -60,32 +60,42 @@ for k, v in (
 cap_flag = False
 
 if st.button("Run Power flow Analysis"):
+    forecast_range = st.session_state["forecast_range"]
+    line_outage_data = [None] * forecast_range
+    outage_data = [None] * forecast_range
+    risk_scores = [None] * forecast_range
     
-    line_outage_data, outage_data, risk_scores = \
-    functions.process_temperature(
-                risk_threshold,
-                st.session_state.network_data['df_line'],
-                st.session_state["exposure_score"]
-                )
+    with st.spinner("Processing weather data and calculating line outages...."):
+        
     
-    # Store the map and data in session state
-    # st.session_state.weather_map_obj = weather_map
-    st.session_state.line_outage_data = line_outage_data
-    st.session_state["outage_hours"] = line_outage_data["hours"]
-    st.session_state["line_down"]    = line_outage_data["lines"]
-    st.session_state["risk_scores"]  = line_outage_data["risk_scores"]
-    # st.session_state.risk_df2 = risk_df
-    st.session_state.outage_data = outage_data
-    st.session_state.risk_score = risk_threshold
+        for x in range(forecast_range):
+            line_outage_data[x], outage_data[x], risk_scores[x] = \
+            functions.process_temperature(
+                        risk_threshold,
+                        st.session_state.network_data['df_line'],
+                        st.session_state["exposure_score"][x]
+                        )
+        
+        # Store the map and data in session state
+        # st.session_state.weather_map_obj = weather_map
+        st.session_state.line_outage_data = line_outage_data
+        # st.session_state["outage_hours"] = line_outage_data["hours"]
+        # st.session_state["line_down"]    = line_outage_data["lines"]
+        # st.session_state["risk_scores"]  = line_outage_data["risk_scores"]
+        # st.session_state.risk_df2 = risk_df
+        st.session_state.outage_data = outage_data
+        st.session_state.risk_score = risk_scores
 
-    # build the outage list first
-    line_outages = functions.generate_line_outages(
-        outage_hours   = st.session_state["outage_hours"],
-        line_down      = st.session_state["line_down"],
-        risk_scores    = st.session_state["risk_scores"],
-        capped_contingency_mode = cap_flag
-    )
-    st.session_state.line_outages = line_outages
+        # build the outage list first
+        line_outages = [None] * forecast_range
+        for x in range(forecast_range):
+            line_outages[x] = functions.generate_line_outages(
+                outage_hours   = st.session_state["line_outage_data"][x]["hours"],
+                line_down      = st.session_state["line_outage_data"][x]["lines"],
+                risk_scores    = st.session_state["line_outage_data"][x]["risk_scores"],
+                capped_contingency_mode = cap_flag
+            )
+        st.session_state.line_outages = line_outages
     
     
     
@@ -96,7 +106,7 @@ if st.button("Run Power flow Analysis"):
         (_lp_bau, _served, _gen, _slack, _rec, _cost,
          _shed, _seen, _shed_buses, _df_lines, _df_trafo,
          _load_df, _line_idx_map, _trafo_idx_map, _gdf,
-         day_end_df, hourly_cost_df) = functions.current_opf(line_outages)
+         day_end_df, hourly_cost_df,hourly_line_data,isolated_loads) = functions.current_opf(line_outages)
 
     # -----------------------------------------------------------------
     # CACHE RESULTS so they persist across page switches
@@ -122,7 +132,8 @@ if st.button("Run Power flow Analysis"):
     #     st.session_state.max_loading_capacity_transformer = (
     #         _df_trafo["max_loading_percent"].max()
     #     )
-
+    st.session_state["hourly_line_data"] = hourly_line_data
+    st.session_state["isolated_loads"] = isolated_loads
     if isinstance(_df_trafo, pd.DataFrame) and not _df_trafo.empty:
         st.session_state.max_loading_capacity_transformer = (
             _df_trafo["max_loading_percent"].max()
@@ -182,12 +193,12 @@ if st.session_state.bau_ready:
     shed_buses   = st.session_state.bau_results['shedding_buses']
     line_idx_map = st.session_state.line_idx_map
     trafo_idx_map= st.session_state.trafo_idx_map
-    outages      = st.session_state.line_outages
+    outages      = st.session_state.line_outages[hr]
 
     # ── helper colour fns (same logic) ─────────────────────
     def get_color(pct, max_cap):
-        if pct is None:                return '#FF0000'
-        if pct == 0:                   return '#000000'
+        if pct is None:                return '#0000FF'
+        if pct == 0:                   return '#0000FF'
         if pct <= 0.75*max_cap:        return '#00FF00'
         if pct <= 0.90*max_cap:        return '#FFFF00'
         if pct <  max_cap:             return '#FFA500'
@@ -320,3 +331,7 @@ if st.session_state.bau_ready:
     # display
     st.write(f"### Network Loading Visualization – Hour {hr}")
     st_folium(m, width=800, height=600, key=f"bau_map_{hr}")
+    
+    st.dataframe(st.session_state["hourly_line_data"])
+    st.write(st.session_state["isolated_loads"])
+    st.dataframe(pd.DataFrame(st.session_state["risk_score"]))
